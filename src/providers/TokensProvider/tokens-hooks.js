@@ -7,14 +7,14 @@ export const useTokens = () => {
   const {isL1} = useTransferData();
   const l2Tokens = useL2Tokens();
   const l1Tokens = useL1Tokens();
-  const {updateTokens} = useContext(TokensContext);
+  const tokensContext = useContext(TokensContext);
   const [tokens, setTokens] = useState(isL1 ? l1Tokens : l2Tokens);
 
   useEffect(() => {
     setTokens(isL1 ? l1Tokens : l2Tokens);
   }, [isL1, l2Tokens, l1Tokens]);
 
-  return {tokens, updateTokens};
+  return {...tokensContext, tokens};
 };
 
 export const useL2Tokens = () => {

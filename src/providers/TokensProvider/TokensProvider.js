@@ -1,9 +1,13 @@
 import PropTypes from 'prop-types';
-import React, {useEffect, useReducer} from 'react';
+import React, {useEffect, useReducer, useRef} from 'react';
 
-import {useLogger, useConfig} from '../../hooks';
+import {useIsL1} from '../../components/Features/Transfer/Transfer.hooks';
+import {LOCAL_STORAGE_REGISTERED_ASSETS_KEY} from '../../constants';
+import {useConfig, useLogger} from '../../hooks';
 import {useL1TokenBalance, useL2TokenBalance} from '../../hooks/useTokenBalance';
-import {useL1Wallet, useL2Wallet} from '../WalletsProvider';
+import {StorageManager} from '../../services';
+import {isEth, l2_watchAsset, watchAsset} from '../../utils';
+import {useL1Wallet, useL2Wallet, useWallets} from '../WalletsProvider';
 import {TokensContext} from './tokens-context';
 import {actions, initialState, reducer} from './tokens-reducer';
 
@@ -11,10 +15,17 @@ export const TokensProvider = ({children}) => {
   const {pollBalanceInterval} = useConfig();
   const logger = useLogger(TokensProvider.displayName);
   const [tokens, dispatch] = useReducer(reducer, initialState);
+  const [isL1] = useIsL1();
+  const {chainId} = useWallets();
   const {account: l1Account} = useL1Wallet();
   const {account: l2Account} = useL2Wallet();
+  const registeredTokens = useRef([]);
   const getL1TokenBalance = useL1TokenBalance(l1Account);
   const getL2TokenBalance = useL2TokenBalance(l2Account);
+
+  useEffect(() => {
+    registeredTokens.current = StorageManager.getItem(LOCAL_STORAGE_REGISTERED_ASSETS_KEY) || [];
+  }, []);
 
   useEffect(() => {
     updateTokens();
@@ -51,6 +62,23 @@ export const TokensProvider = ({children}) => {
     }
   };
 
+  const addToken = async tokenData => {
+    if (!tokenData || (isL1 && isEth(tokenData))) return;
+    const {tokenAddress, symbol} = tokenData;
+    if (!isTokenAdded(symbol)) {
+      const options = {address: tokenAddress[chainId], ...tokenData};
+      const wasAdded = await (isL1 ? watchAsset(options) : l2_watchAsset(options));
+      if (wasAdded) {
+        registeredTokens.current = [...registeredTokens.current, symbol];
+        StorageManager.setItem(LOCAL_STORAGE_REGISTERED_ASSETS_KEY, registeredTokens.current);
+      }
+    }
+  };
+
+  const isTokenAdded = symbol => {
+    return registeredTokens.current.includes(symbol);
+  };
+
   const updateTokenState = (index, args) => {
     dispatch({
       type: actions.UPDATE_TOKEN_STATE,
@@ -63,6 +91,7 @@ export const TokensProvider = ({children}) => {
 
   const context = {
     tokens,
+    addToken,
     updateTokens
   };
 
